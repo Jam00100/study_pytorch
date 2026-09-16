@@ -1,3 +1,245 @@
+# Basic PyTorch Knowledge
+
+## Device
+
+選擇模型訓練時使用的運算裝置：
+
+```python
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
+elif torch.cuda.is_available():
+    device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
+```
+
+- `mps`：使用 Apple Silicon GPU
+- `cuda`：使用 NVIDIA GPU
+- `cpu`：使用 CPU
+
+模型和資料必須放在相同裝置：
+
+```python
+model = model.to(device)
+images = images.to(device)
+labels = labels.to(device)
+```
+
+---
+
+## Tensor
+
+### 將資料轉換成 Tensor
+
+PyTorch 模型使用 Tensor 進行運算。
+
+```python
+tensor = torch.tensor(要轉換的資料)
+```
+
+例如：
+
+```python
+x = torch.tensor([1, 2, 3])
+```
+
+### 轉換資料型別
+
+可以透過 `dtype` 指定資料型別：
+
+```python
+x = torch.tensor([1, 2, 3], dtype=torch.float32)
+```
+
+也可以在建立 Tensor 後進行轉換：
+
+```python
+x = x.to(torch.float32)
+y = y.to(torch.int64)
+```
+
+常見的簡寫方式：
+
+```python
+x = x.float()
+y = y.long()
+```
+
+> 建議使用 `torch.float32`、`torch.int64` 等 PyTorch dtype，不要寫成 `.to(float or int)`。
+
+### 將 Tensor 送到運算裝置
+
+```python
+x = x.to(device)
+```
+
+也可以同時轉換資料型別和裝置：
+
+```python
+x = x.to(device=device, dtype=torch.float32)
+```
+
+---
+
+# CNN（Convolutional Neural Network）
+
+## 圖片轉換
+
+### `transforms.Compose()`
+
+- 將多個圖片轉換操作組合起來
+- 按照程式碼中設定的順序處理圖片
+
+使用方式：
+
+```python
+train_transform = transforms.Compose([
+    transforms.RandomResizedCrop(
+        size=IMAGE_SIZE,
+        scale=(0.7, 1.0)
+    ),
+    transforms.RandomHorizontalFlip(p=0.5),
+    transforms.ColorJitter(
+        brightness=0.1,
+        contrast=0.1,
+        saturation=0.1
+    ),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    )
+])
+```
+
+---
+
+### `transforms.RandomResizedCrop()`
+
+- 從圖片中隨機裁切一個區域
+- 再將裁切區域縮放成指定大小
+
+主要參數：
+
+- `size`：最後輸出的圖片大小
+- `scale`：裁切區域占原圖面積的比例範圍
+- `ratio`：裁切區域的寬高比，通常可以使用預設值
+
+```python
+transforms.RandomResizedCrop(
+    size=IMAGE_SIZE,
+    scale=(0.7, 1.0)
+)
+```
+
+#### 目的：增加圖片構圖的變化
+
+對貓狗分類而言，可以讓模型學習：
+
+1. 貓狗可能出現在圖片中的不同位置。
+2. 主體距離鏡頭可能不同。
+3. 圖片可能只拍到部分身體。
+4. 不依賴固定的背景與構圖。
+
+在不同 epoch 中讀取同一張圖片時，可能得到：
+
+```text
+第 1 次：包含整隻貓
+第 2 次：主要看到貓的臉
+第 3 次：貓出現在畫面左側
+```
+
+---
+
+### `transforms.RandomHorizontalFlip(p=0.5)`
+
+- 隨機水平翻轉圖片
+- `p` 是 probability，代表執行翻轉的機率
+- `p=0.5` 表示 50% 機率翻轉，50% 機率保持原圖
+
+#### 目的：資料增強（Data Augmentation）
+
+1. 增加資料多樣性：同一張圖片可以呈現不同方向。
+2. 降低過擬合：避免模型記住特定圖片或方向。
+3. 增強方向不變性：貓狗朝左或朝右都不影響分類。
+
+不適合水平翻轉的任務包括：
+
+- 文字辨識
+- 判斷左手或右手
+- 交通標誌方向辨識
+- 醫學影像的左側或右側病灶
+- 判斷車輛行駛方向
+
+---
+
+### `transforms.ColorJitter()`
+
+- 隨機調整圖片的亮度、對比度和飽和度
+- 屬於資料增強的一種
+- 通常只用於訓練集，不用於驗證集和測試集
+
+```python
+transforms.ColorJitter(
+    brightness=0.1,  # 亮度在原本的 0.9～1.1 倍之間變化
+    contrast=0.1,    # 對比度在原本的 0.9～1.1 倍之間變化
+    saturation=0.1   # 飽和度在原本的 0.9～1.1 倍之間變化
+)
+```
+
+#### 目的：讓模型適應不同的光線與拍攝環境
+
+避免模型過度依賴圖片的亮度、色調或背景顏色判斷貓狗。
+
+---
+
+### `transforms.ToTensor()`
+
+#### 目的：將圖片轉換成 CNN 可以處理的 Tensor
+
+```python
+transforms.ToTensor()
+```
+
+主要進行兩項轉換：
+
+1. 將圖片排列從 `HWC` 改成 `CHW`。
+2. 將像素值從 `0～255` 縮放到 `0～1`。
+
+假設圖片大小為 `224 × 224`：
+
+```text
+轉換前：[Height=224, Width=224, Channel=3]
+轉換後：[Channel=3, Height=224, Width=224]
+```
+
+---
+
+### `transforms.Normalize()`
+
+#### 目的：調整各色彩通道的數值分布，讓模型訓練更加穩定
+
+```python
+transforms.Normalize(
+    mean=[0.485, 0.456, 0.406],
+    std=[0.229, 0.224, 0.225]
+)
+```
+
+標準化公式：
+
+$$
+x' = \frac{x - mean}{std}
+$$
+
+- `mean`：RGB 三個通道的平均值
+- `std`：RGB 三個通道的標準差
+- 這組數值來自 ImageNet，常用於搭配 ImageNet 預訓練模型
+- `Normalize()` 不會移除離群值
+- 必須放在 `ToTensor()` 後面
+
+---
+
 ## CNN模型建立
 
 ### class CatDogCNN(nn.Module)
