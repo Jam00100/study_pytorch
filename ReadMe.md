@@ -1,2 +1,2 @@
-# study_pytorch
+# Study PyTorch
 study PyTorch
