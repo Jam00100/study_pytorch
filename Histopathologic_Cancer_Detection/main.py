@@ -577,26 +577,30 @@ class TestDataset(Dataset):
             if self.transform is not None:
                 image = self.transform(image)
 
-        # 例如 123.tif → 123
-        image_id = int(image_path.stem)
+        # 例如 123.tif → 123, 但這邊圖片含有str不能轉int
+        image_id = image_path.stem
 
         return image, image_id
 
-test_paths = sorted(TEST_DIR.glob("*.tif"), key=lambda path: int(path.stem))
+# 讓sample輸出順序與Kaggle提供的相同
+submission_df = pd.read_csv(f"{INPUT_DIR}/sample_submission.csv")
+# 這個project的image id含有str所以不能用int()
+test_paths = [f"{TEST_DIR}/{image_id}.tif" for image_id in submission_df["id"]]
+
 # print(f"測試圖片數量：{len(test_paths)}")
 # print("前五張：", [path.name for path in test_paths[:5]])
 # print("最後五張：", [path.name for path in test_paths[-5:]])
 
 test_dataset = TestDataset(
     image_paths=test_paths,
-    transform=val_transform
+    transform=validation_transform
 )
 
 test_loader = DataLoader(
     dataset=test_dataset,
     batch_size=BATCH_SIZE,
     shuffle=False,
-    num_workers=NUM_WORKERS,
+    num_workers=2,
     pin_memory=torch.cuda.is_available()
 )
 
@@ -617,11 +621,11 @@ with torch.inference_mode():
         # 模型輸出 logits
         logits = model(images)
 
-        # logits → 狗的機率
+        # logits → 癌症的機率
         probabilities = torch.sigmoid(logits)
 
         # 移回 CPU 並存入 list
-        test_ids_list.extend(image_ids.cpu().numpy().tolist())
+        test_ids_list.extend(image_ids)
 
         test_probabilities.extend(probabilities.cpu().numpy().tolist())
 
@@ -630,7 +634,7 @@ with torch.inference_mode():
 # print("\n前十筆預測：")
 
 for image_id, probability in zip(test_ids_list[:10], test_probabilities[:10]):
-    print(f"ID：{image_id:5d} | " f"cancer的機率：{probability:.4f}")
+    print(f"ID：{image_id} | " f"癌症機率：{probability:.4f}")
 
 print(f"最小機率：{min(test_probabilities):.6f}")
 print(f"最大機率：{max(test_probabilities):.6f}")
@@ -642,9 +646,6 @@ submission = pd.DataFrame({
 
 # 按圖片 ID 排序
 submission = submission.sort_values("id").reset_index(drop=True)
-
-# 避免機率剛好等於 0 或 1
-submission["label"] = np.clip(submission["label"], 0.005,0.995)
 
 SUBMISSION_PATH = Path("/kaggle/working/submission.csv")
 
