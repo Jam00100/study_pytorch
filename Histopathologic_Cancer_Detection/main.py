@@ -582,10 +582,10 @@ class TestDataset(Dataset):
 
         return image, image_id
 
-# 讓sample輸出順序與Kaggle提供的相同
-submission_df = pd.read_csv(f"{INPUT_DIR}/sample_submission.csv")
+# 讓sample輸出順序與Kaggle提供的相同 (要保留Path屬性)
+submission_df = pd.read_csv(INPUT_DIR / "sample_submission.csv")
 # 這個project的image id含有str所以不能用int()
-test_paths = [f"{TEST_DIR}/{image_id}.tif" for image_id in submission_df["id"]]
+test_paths = test_paths = [TEST_DIR / f"{image_id}.tif" for image_id in submission_df["id"]]
 
 # print(f"測試圖片數量：{len(test_paths)}")
 # print("前五張：", [path.name for path in test_paths[:5]])
